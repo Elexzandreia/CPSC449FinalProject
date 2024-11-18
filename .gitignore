@@ -2,3 +2,4 @@ venv
 myenv
 config.py
 __pycache__
+generateJwt.py

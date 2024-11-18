@@ -10,7 +10,6 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL
 );
 
@@ -24,7 +23,9 @@ CREATE TABLE tasks (
     title VARCHAR(80) NOT NULL,
     description VARCHAR(200),
     priority_id INT,
-    FOREIGN KEY (priority_id) REFERENCES priorities(id)
+    user_id INT NOT NULL,  -- Foreign key to users table
+    FOREIGN KEY (priority_id) REFERENCES priorities(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE tags (
