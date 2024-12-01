@@ -4,17 +4,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from models import db, User, Task, Tag, Priority, TaskTag
 from werkzeug.security import generate_password_hash, check_password_hash
 import config
-from pymongo import MongoClient
 
-# MongoDB Configuration
-mongo_client = MongoClient("mongodb://localhost:27017/")
-mongo_db = mongo_client['task_manager']
-
-# Collections
-users_collection = mongo_db['users']
-tasks_collection = mongo_db['tasks']
-tags_collection = mongo_db["tags"]
-priorities_collection = mongo_db["priorities"]
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -31,7 +21,6 @@ def register():
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({"error": "Username and password are required"}), 400
 
-    # MySQL (SQLAlchemy)
     if User.query.filter_by(username=data['username']).first():
         return jsonify({"error": "Username already taken"}), 400
 
@@ -42,16 +31,6 @@ def register():
     )
     db.session.add(new_user)
     db.session.commit()
-
-    # MongoDB
-    if users_collection.find_one({"username": data['username']}):
-        return jsonify({"error": "Username already taken in MongoDB"}), 400
-
-    users_collection.insert_one({
-        "username": data["username"],
-        "password_hash": hashed_password
-    })
-
     return jsonify({"message": "User registered successfully"}), 201
 
 
@@ -115,13 +94,6 @@ def create_task():
         new_task.tags.append(tag)
 
     db.session.commit()
-
-    # MongoDB (Task Details)
-    tasks_collection.insert_one({
-        "mysql_task_id": new_task.id,  # Link to MySQL
-        "description": data['description']
-    })
-
     cache.clear()  # Clear cache to keep data consistent
     return jsonify({"message": "Task successfully created"}), 201
 
@@ -170,7 +142,6 @@ def get_tasks_by_user():
 
     # Fetch tasks from the database
     tasks = Task.query.filter_by(user_id=user.id).all()
-
     task_list = [{
         "id": task.id,
         "title": task.title,
