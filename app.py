@@ -1,10 +1,18 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_caching import Cache
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from models import db, User, Task, Tag, Priority, TaskTag
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+import os
+import json
 import config
 
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+genai.configure(api_key="YOUR_GEMINI_API_KEY")
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = Flask(__name__)
 app.config.from_object(config)
@@ -13,6 +21,10 @@ cache = Cache(app)
 # Initialize the database
 db.init_app(app)
 jwt = JWTManager(app)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 # Route for user registration
 @app.route('/register', methods=['POST'])
@@ -155,6 +167,126 @@ def get_tasks_by_user():
     cache.set(cache_key, task_list, timeout=60)  # Cache for 60 seconds
     return jsonify({"task_count": len(task_list), "tasks": task_list}), 200
 
+@app.route('/api/export/tasks', methods=['GET'])
+@jwt_required()
+def export_tasks():
+    try:
+        print('/api/export/tasks RUNNING')
+
+        current_user_id = get_jwt_identity()
+        
+        # Get all tasks for the current user
+        tasks = Task.query.filter_by(user_id=current_user_id).all()
+        
+        # Format timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create optimized JSON structure
+        export_data = {
+            "metadata": {
+                "export_timestamp": timestamp,
+                "user_id": current_user_id,
+                "total_tasks": len(tasks)
+            },
+            "tasks": [
+                {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description or "",  # Handle None values
+                    "p": task.priority.name if task.priority else "NONE",  # Shortened key for priority
+                    "t": [tag.name for tag in task.tags]  # Shortened key for tags
+                }
+                for task in tasks
+            ]
+        }
+        
+        # Create filename with timestamp
+        filename = f"tasks_export_{timestamp}.json"
+        
+        # Set response headers for file download
+        response = jsonify(export_data)
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        response.headers['Content-Type'] = 'application/json'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/tasks/analyze', methods=['POST'])
+@jwt_required()
+def analyze_tasks():
+    try:
+        # Get and verify user identity
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
+            return jsonify({"error": "Invalid user token"}), 401
+            
+        # Get and verify request data
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
+        user_prompt = data.get('prompt')
+        if not user_prompt:
+            return jsonify({"error": "Prompt is required"}), 400
+            
+        # Get tasks for the current user
+        tasks = Task.query.filter_by(user_id=current_user_id).all()
+        if not tasks:
+            return jsonify({"response": "You don't have any tasks yet. Create some tasks first!"}), 200
+        
+        # Format tasks data
+        tasks_data = {
+            "tasks": [
+                {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description or "",
+                    "priority": task.priority.name if task.priority else "NONE",
+                    "tags": [tag.name for tag in task.tags]
+                }
+                for task in tasks
+            ]
+        }
+        
+        context = f"""
+        You are a task management assistant. You have access to the user's tasks in the following format:
+        {json.dumps(tasks_data, indent=2)}
+        
+        Please analyze these tasks and respond to the user's question. Focus on providing clear, concise answers.
+        Be specific and reference actual task titles when relevant.
+        
+        User's question: {user_prompt}
+        """
+        
+        try:
+            # Configure safety settings
+            # safety_settings = {
+            #     HarmCategory.HARASSMENT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
+            #     HarmCategory.HATE_SPEECH: HarmBlockThreshold.MEDIUM_AND_ABOVE,
+            #     HarmCategory.SEXUALLY_EXPLICIT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
+            #     HarmCategory.DANGEROUS_CONTENT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
+            # }
+            
+            # Generate response
+            # response = model.generate_content(
+            #     context,
+            #     safety_settings=safety_settings,
+            #     generation_config={"temperature": 0.7}
+            # )
+
+            response = model.generate_content(context)
+            
+            return jsonify({"response": response.text})
+            
+        except Exception as gemini_error:
+            app.logger.error(f"Gemini API error: {str(gemini_error)}")
+            return jsonify({"error": "Error generating AI response. Please try again."}), 500
+            
+    except Exception as e:
+        app.logger.error(f"General error in analyze_tasks: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():
