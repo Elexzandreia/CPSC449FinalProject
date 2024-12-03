@@ -57,3 +57,18 @@ To set up the project's database, follow these steps:
 7. Run the following command to list all installed packages and write them to requirements.txt
     ```bash
     pip freeze > requirements.txt
+
+## Add your Gemini API Key
+To make AI assistant works, you need to add Gemini API Key.
+
+1. Open app.py in your editor.
+2. Locate this line and change YOUR_GEMINI_API_KEY to the your actual Gemini API Key, which is created from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   ```bash
+   genai.configure(api_key="YOUR_GEMINI_API_KEY")
+Note: The default implementing Gemini model is 1.5 Flash. You can change to another Gemini models.
+
+    model = genai.GenerativeModel('model-name')
+    
+For more information of Gemini models, check out on [this link](https://ai.google.dev/gemini-api/docs/models/gemini)
+
+
