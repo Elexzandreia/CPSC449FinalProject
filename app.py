@@ -48,6 +48,7 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
+    print("Login endpoint was hit")
     data = request.json
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({"error": "Username and password are required"}), 400
@@ -287,6 +288,87 @@ def analyze_tasks():
     except Exception as e:
         app.logger.error(f"General error in analyze_tasks: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+# Route for editing/updating a task (JWT protected)
+@app.route('/tasks/<int:task_id>', methods=['PUT'])
+@jwt_required()
+def update_task(task_id):
+    try:
+        # Get the current logged-in user's ID
+        current_user_id = get_jwt_identity()
+
+        # Get the task by its ID
+        task = Task.query.get(task_id)
+
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+
+        # Check if the logged-in user is the owner of the task
+        if task.user_id != int(current_user_id):
+            return jsonify({"error": "You do not have permission to update this task"}), 403
+
+        # Update the task details
+        data = request.json
+        task.title = data.get('title', task.title)
+        task.description = data.get('description', task.description)
+        task.priority_id = data.get('priority_id', task.priority_id)
+
+        # Update tags (optional)
+        tag_names = data.get('tags', [])
+        if not isinstance(tag_names, list) or not all(isinstance(tag, str) for tag in tag_names):
+            return jsonify({"error": "Tags must be a list of strings"}), 400
+
+        task.tags = []  # Clear the existing tags
+        for tag_name in tag_names:
+            tag = Tag.query.filter_by(name=tag_name).first()
+            if not tag:
+                tag = Tag(name=tag_name)
+                db.session.add(tag)
+            task.tags.append(tag)
+
+        # Commit the changes
+        db.session.commit()
+        return jsonify({"message": "Task updated successfully"}), 200
+
+    except Exception as e:
+        # Log the exception and return a 500 error
+        app.logger.error(f"Error occurred while updating the task: {str(e)}")
+        return jsonify({"error": "An error occurred while updating the task. Please try again."}), 500
+
+# Route for deleting a task (JWT protected)
+@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+@jwt_required()
+def delete_task(task_id):
+    try:
+        current_user_id = get_jwt_identity()  # Get the logged-in user's ID
+
+        # Find the task to be deleted
+        task = Task.query.get(task_id)
+        
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+        
+        # DEBUG: Log the current user ID and task's user ID
+        app.logger.info(f"Current user ID: {current_user_id}, Task owner ID: {task.user_id}")
+
+
+        # Check if the logged-in user owns the task
+        if task.user_id != int(current_user_id):
+            return jsonify({"error": "You do not have permission to delete this task"}), 403
+
+        # Delete the task
+        db.session.delete(task)
+        db.session.commit()
+        
+        cache.clear()  # Clear cache to keep data consistent
+        
+        return jsonify({"message": "Task deleted successfully"}), 200
+
+    except Exception as e:
+        app.logger.error(f"Error deleting task: {str(e)}")
+        return jsonify({"error": "An error occurred while trying to delete the task"}), 500
+
 
 if __name__ == '__main__':
     with app.app_context():
