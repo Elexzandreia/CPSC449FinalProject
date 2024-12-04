@@ -71,4 +71,61 @@ Note: The default implementing Gemini model is 1.5 Flash. You can change to anot
     
 For more information of Gemini models, check out on [this link](https://ai.google.dev/gemini-api/docs/models/gemini)
 
+## Detailed API Endpoints:
+Here are detailed descriptions of each API endpoint in the `app.py` file:
+1. **Index Route**:
+   - **Endpoint**: `/`
+   - **Method**: `GET`
+   - **Description**: Serves the `index.html` file, which is the main entry point for the web application.
+
+2. **User Registration**:
+   - **Endpoint**: `/register`
+   - **Method**: `POST`
+   - **Description**: Registers a new user by accepting a JSON payload with `username` and `password`. It hashes the password and stores the user in the database. Returns a success message or an error if the username is already taken or the input is invalid.
+
+3. **User Login**:
+   - **Endpoint**: `/login`
+   - **Method**: `POST`
+   - **Description**: Authenticates a user by accepting a JSON payload with `username` and `password`. It checks the credentials and returns a JWT access token if successful. Returns an error message if the credentials are invalid.
+
+4. **Create Task**:
+   - **Endpoint**: `/tasks`
+   - **Method**: `POST`
+   - **Description**: Creates a new task for the authenticated user. Accepts a JSON payload with `title`, `description`, `priority_id`, and `tags`. Validates the input and creates the task, associating it with the user and any specified tags. Returns a success message or an error if the input is invalid.
+
+5. **Get All Tasks**:
+   - **Endpoint**: `/tasks`
+   - **Method**: `GET`
+   - **Description**: Retrieves all tasks for the authenticated user. The response is cached for 60 seconds to improve performance. Returns a list of tasks with their details.
+
+6. **Get Tasks by User**:
+   - **Endpoint**: `/tasks/user`
+   - **Method**: `POST`
+   - **Description**: Retrieves tasks for a specific user or the authenticated user. Accepts a JSON payload with an optional `username` and `timestamp`. If `username` is provided, it fetches tasks for that user; otherwise, it fetches tasks for the authenticated user. The response is cached for 60 seconds unless a `timestamp` is provided. Returns a list of tasks with their details.
+
+7. **Update Task**:
+   - **Endpoint**: `/tasks/<int:task_id>`
+   - **Method**: `PUT`
+   - **Description**: Updates an existing task for the authenticated user. Accepts a JSON payload with the updated task details. Validates the input and updates the task in the database. Returns a success message or an error if the input is invalid or the task is not found.
+
+8. **Export Tasks**:
+   - **Endpoint**: `/api/export/tasks`
+   - **Method**: `GET`
+   - **Description**: Exports tasks to a JSON-format payload for the authenticated user. Returns that JSON or an error if the export fails.
+
+9. **Analyze Tasks**:
+   - **Endpoint**: `/api/analyze/tasks`
+   - **Method**: `POST`
+   - **Description**: Analyzes tasks using an AI model. Accepts a JSON payload with the tasks to be analyzed. Returns the AI-generated analysis or an error if the analysis fails.
+
+10. **Toggle Task Completion**:
+    - **Endpoint**: `/tasks/<int:task_id>/toggle-completion`
+    - **Method**: `PUT`
+    - **Description**: Toggles the completion status of a task for the authenticated user. Updates the task's `is_completed` status and adjusts the associated tags. Returns a success message with the updated task details or an error if the task is not found or the update fails.
+
+11. **Get Tasks Completion Status**:
+    - **Endpoint**: `/tasks/completion-status`
+    - **Method**: `GET`
+    - **Description**: Retrieves the completion status summary of tasks for the authenticated user. Returns a summary with the total number of tasks, the number of completed tasks, the number of incomplete tasks, and a list of tasks with their completion status.
+
 
