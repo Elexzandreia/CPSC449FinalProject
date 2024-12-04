@@ -24,6 +24,7 @@ CREATE TABLE tasks (
     description VARCHAR(200),
     priority_id INT,
     user_id INT NOT NULL,  -- Foreign key to users table
+    is_completed BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (priority_id) REFERENCES priorities(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

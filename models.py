@@ -17,6 +17,7 @@ class Task(db.Model):
     description = db.Column(db.String(200))
     priority_id = db.Column(db.Integer, db.ForeignKey('priorities.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # Foreign key to User
+    is_completed = db.Column(db.Boolean, default=False)
 
     priority = db.relationship('Priority', back_populates='tasks')
     tags = db.relationship('Tag', secondary='task_tags', back_populates='tasks')

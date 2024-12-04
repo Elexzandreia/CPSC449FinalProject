@@ -234,3 +234,32 @@ ai-response-area {
     padding: 5px 10px;
     font-size: 12px;
 }
+
+.task-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.task-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.completed-task {
+    text-decoration: line-through;
+    color: #666;
+}
+
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.task-actions {
+    display: flex;
+    gap: 10px;
+}

@@ -11,7 +11,7 @@ import config
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
+genai.configure(api_key="AIzaSyDCSO7ICfSmRrOh5LsDCVFzlWY5pZs7-s4")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = Flask(__name__)
@@ -169,8 +169,9 @@ def get_tasks_by_user():
         "description": task.description,
         "priority": task.priority.name if task.priority else None,
         "tags": [tag.name for tag in task.tags],
-        "created_by": user.username
-    } for task in tasks]
+        "created_by": user.username,
+        "is_completed": task.is_completed
+} for task in tasks]
     
     # Only cache if no timestamp was provided (not a force refresh)
     if not request_timestamp:
@@ -182,8 +183,6 @@ def get_tasks_by_user():
 @jwt_required()
 def export_tasks():
     try:
-        print('/api/export/tasks RUNNING')
-
         current_user_id = get_jwt_identity()
         
         # Get all tasks for the current user
@@ -205,7 +204,8 @@ def export_tasks():
                     "title": task.title,
                     "description": task.description or "",  # Handle None values
                     "p": task.priority.name if task.priority else "NONE",  # Shortened key for priority
-                    "t": [tag.name for tag in task.tags]  # Shortened key for tags
+                    "t": [tag.name for tag in task.tags],  # Shortened key for tags
+                    "i": task.is_completed
                 }
                 for task in tasks
             ]
@@ -255,7 +255,8 @@ def analyze_tasks():
                     "title": task.title,
                     "description": task.description or "",
                     "priority": task.priority.name if task.priority else "NONE",
-                    "tags": [tag.name for tag in task.tags]
+                    "tags": [tag.name for tag in task.tags],
+                    "is_completed": task.is_completed
                 }
                 for task in tasks
             ]
@@ -272,21 +273,6 @@ def analyze_tasks():
         """
         
         try:
-            # Configure safety settings
-            # safety_settings = {
-            #     HarmCategory.HARASSMENT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
-            #     HarmCategory.HATE_SPEECH: HarmBlockThreshold.MEDIUM_AND_ABOVE,
-            #     HarmCategory.SEXUALLY_EXPLICIT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
-            #     HarmCategory.DANGEROUS_CONTENT: HarmBlockThreshold.MEDIUM_AND_ABOVE,
-            # }
-            
-            # Generate response
-            # response = model.generate_content(
-            #     context,
-            #     safety_settings=safety_settings,
-            #     generation_config={"temperature": 0.7}
-            # )
-
             response = model.generate_content(context)
             
             return jsonify({"response": response.text})
@@ -370,6 +356,82 @@ def delete_task(task_id):
         app.logger.error(f"Error deleting task: {str(e)}")
         return jsonify({"error": "An error occurred while trying to delete the task"}), 500
 
+@app.route('/tasks/<int:task_id>/toggle-completion', methods=['PATCH'])
+@jwt_required()
+def toggle_task_completion(task_id):
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.json
+        is_completed = data.get('is_completed', False)
+        manage_tag = data.get('manage_tag', True)  # Default to True for tag management
+        
+        task = Task.query.get(task_id)
+        
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+        if task.user_id != int(current_user_id):
+            return jsonify({"error": "You do not have permission to modify this task"}), 403
+            
+        # Update completion status
+        task.is_completed = is_completed
+        
+        if manage_tag:
+            completed_tag = Tag.query.filter_by(name='Completed').first()
+            if not completed_tag:
+                completed_tag = Tag(name='Completed')
+                db.session.add(completed_tag)
+            
+            if is_completed:
+                # Add 'Completed' tag if not present
+                if completed_tag not in task.tags:
+                    task.tags.append(completed_tag)
+            else:
+                # Remove 'Completed' tag if present
+                if completed_tag in task.tags:
+                    task.tags.remove(completed_tag)
+        
+        db.session.commit()
+        cache.delete_memoized(get_tasks_by_user)
+        
+        return jsonify({
+            "message": "Task status updated successfully",
+            "task_id": task.id,
+            "is_completed": task.is_completed,
+            "tags": [tag.name for tag in task.tags]
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error toggling task completion: {str(e)}")
+        db.session.rollback()
+        return jsonify({"error": "An error occurred while updating the task"}), 500
+
+
+@app.route('/tasks/completion-status', methods=['GET'])
+@jwt_required()
+def get_tasks_completion_status():
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Get all tasks for the current user
+        tasks = Task.query.filter_by(user_id=current_user_id).all()
+        
+        # Create status summary
+        status_summary = {
+            "total_tasks": len(tasks),
+            "completed_tasks": len([t for t in tasks if t.is_completed]),
+            "incomplete_tasks": len([t for t in tasks if not t.is_completed]),
+            "tasks": [{
+                "id": task.id,
+                "title": task.title,
+                "is_completed": task.is_completed
+            } for task in tasks]
+        }
+        
+        return jsonify(status_summary), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error getting completion status: {str(e)}")
+        return jsonify({"error": "An error occurred while fetching task status"}), 500
 
 if __name__ == '__main__':
     with app.app_context():

@@ -249,19 +249,28 @@ function displayTasks(tasks) {
         const taskData = encodeURIComponent(JSON.stringify(task));
         
         taskElement.innerHTML = `
-            <h3>${task.title}</h3>
+            <div class="task-header">
+                <div class="task-status">
+                    <input type="checkbox" 
+                           id="task-${task.id}" 
+                           class="task-checkbox"
+                           ${task.is_completed ? 'checked' : ''}
+                           onchange="toggleTaskCompletion(${task.id}, this.checked)">
+                    <h3 class="${task.is_completed ? 'completed-task' : ''}">${task.title}</h3>
+                </div>
+                <div class="task-actions">
+                    <button class="button-small edit-button" onclick="openEditModal('${taskData}')">
+                        Edit
+                    </button>
+                    <button class="button-small delete-button" onclick="deleteTask(${task.id})">
+                        Delete
+                    </button>
+                </div>
+            </div>
             <p>${task.description || 'No description'}</p>
             <div>Priority: ${task.priority}</div>
             <div class="tags-container">
                 ${task.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-            </div>
-            <div class="task-actions">
-                <button class="button-small edit-button" onclick="openEditModal('${taskData}')">
-                    Edit
-                </button>
-                <button class="button-small delete-button" onclick="deleteTask(${task.id})">
-                    Delete
-                </button>
             </div>
         `;
         taskList.appendChild(taskElement);
@@ -334,6 +343,39 @@ async function deleteTask(taskId) {
         }
     } catch (error) {
         showMessage('Failed to delete task: ' + error.message, true);
+    }
+}
+
+async function toggleTaskCompletion(taskId, isCompleted) {
+    try {
+        const response = await fetch(`/tasks/${taskId}/toggle-completion`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                is_completed: isCompleted,
+                manage_tag: true  // Tell backend to manage 'Completed' tag
+            })
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to update task status');
+        }
+
+        // Refresh tasks to show updated state
+        await fetchTasks();
+        
+    } catch (error) {
+        console.error('Error updating task status:', error);
+        showMessage('Failed to update task status: ' + error.message, true);
+        // Revert checkbox state if there was an error
+        const checkbox = document.getElementById(`task-${taskId}`);
+        if (checkbox) {
+            checkbox.checked = !isCompleted;
+        }
     }
 }
 
