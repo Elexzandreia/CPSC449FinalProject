@@ -11,7 +11,7 @@ import config
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-genai.configure(api_key="AIzaSyDCSO7ICfSmRrOh5LsDCVFzlWY5pZs7-s4")
+genai.configure(api_key="YOUR_GEMINI_API_KEY")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = Flask(__name__)
