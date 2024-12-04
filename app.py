@@ -15,6 +15,9 @@ genai.configure(api_key="YOUR_GEMINI_API_KEY")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = Flask(__name__)
+app.config['CACHE_TYPE'] = 'simple'
+app.config['CACHE_DEFAULT_TIMEOUT'] = 0  # Disable default caching
+
 app.config.from_object(config)
 cache = Cache(app)
 
@@ -132,12 +135,12 @@ def get_tasks():
 def get_tasks_by_user():
     data = request.json
     current_user_id = get_jwt_identity()  # Get the logged-in user's ID
-
+    
     # Validate request body
     username = data.get('username')  # Get the username from the request body
     if username and not isinstance(username, str):
         return jsonify({"error": "Username must be a string"}), 400
-
+        
     # Determine the user whose tasks to fetch
     if username:
         cache_key = f"user_tasks_{username}"
@@ -147,12 +150,17 @@ def get_tasks_by_user():
     else:
         cache_key = f"user_tasks_{current_user_id}"
         user = User.query.get(current_user_id)
-
+    
+    # Get timestamp from request to handle cache busting
+    request_timestamp = data.get('timestamp')
+    if request_timestamp:
+        cache_key = f"{cache_key}_{request_timestamp}"
+    
     # Check if tasks are cached
     cached_tasks = cache.get(cache_key)
-    if cached_tasks:
+    if cached_tasks and not request_timestamp:  # Only use cache if no timestamp provided
         return jsonify({"task_count": len(cached_tasks), "tasks": cached_tasks}), 200
-
+        
     # Fetch tasks from the database
     tasks = Task.query.filter_by(user_id=user.id).all()
     task_list = [{
@@ -163,9 +171,11 @@ def get_tasks_by_user():
         "tags": [tag.name for tag in task.tags],
         "created_by": user.username
     } for task in tasks]
-
-    # Cache the tasks
-    cache.set(cache_key, task_list, timeout=60)  # Cache for 60 seconds
+    
+    # Only cache if no timestamp was provided (not a force refresh)
+    if not request_timestamp:
+        cache.set(cache_key, task_list, timeout=60)  # Cache for 60 seconds
+        
     return jsonify({"task_count": len(task_list), "tasks": task_list}), 200
 
 @app.route('/api/export/tasks', methods=['GET'])
@@ -295,44 +305,35 @@ def analyze_tasks():
 @jwt_required()
 def update_task(task_id):
     try:
-        # Get the current logged-in user's ID
         current_user_id = get_jwt_identity()
-
-        # Get the task by its ID
         task = Task.query.get(task_id)
-
         if not task:
             return jsonify({"error": "Task not found"}), 404
-
-        # Check if the logged-in user is the owner of the task
         if task.user_id != int(current_user_id):
             return jsonify({"error": "You do not have permission to update this task"}), 403
-
-        # Update the task details
+            
         data = request.json
         task.title = data.get('title', task.title)
         task.description = data.get('description', task.description)
         task.priority_id = data.get('priority_id', task.priority_id)
-
-        # Update tags (optional)
+        
         tag_names = data.get('tags', [])
         if not isinstance(tag_names, list) or not all(isinstance(tag, str) for tag in tag_names):
             return jsonify({"error": "Tags must be a list of strings"}), 400
-
-        task.tags = []  # Clear the existing tags
+            
+        task.tags = []
         for tag_name in tag_names:
             tag = Tag.query.filter_by(name=tag_name).first()
             if not tag:
                 tag = Tag(name=tag_name)
                 db.session.add(tag)
             task.tags.append(tag)
-
-        # Commit the changes
+            
         db.session.commit()
+        cache.delete_memoized(get_tasks_by_user)  # Clear the specific user's cache
+        cache.delete_memoized(get_tasks)          # Clear the general tasks cache
         return jsonify({"message": "Task updated successfully"}), 200
-
     except Exception as e:
-        # Log the exception and return a 500 error
         app.logger.error(f"Error occurred while updating the task: {str(e)}")
         return jsonify({"error": "An error occurred while updating the task. Please try again."}), 500
 

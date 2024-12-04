@@ -79,13 +79,48 @@
                 </form>
             </div>
 
-            <!-- Task List -->
             <div class="card">
                 <div class="task-header">
                     <h2>Tasks</h2>
                     <button onclick="fetchTasks()">Refresh Tasks</button>
                 </div>
                 <div id="taskList" class="task-list"></div>
+            </div>
+        
+            <!-- Add Edit Task Modal -->
+            <div id="editTaskModal" class="modal hidden">
+                <div class="modal-content">
+                    <span class="close-button" onclick="closeEditModal()">&times;</span>
+                    <h2>Edit Task</h2>
+                    <form id="editTaskForm">
+                        <input type="hidden" id="editTaskId">
+                        <div class="form-group">
+                            <label for="editTaskTitle">Title:</label>
+                            <input type="text" id="editTaskTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editTaskDescription">Description:</label>
+                            <textarea id="editTaskDescription" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="editTaskPriority">Priority:</label>
+                            <select id="editTaskPriority" required>
+                                <option value="1">High</option>
+                                <option value="2">Medium</option>
+                                <option value="3">Low</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tags:</label>
+                            <div class="tag-input">
+                                <input type="text" id="editTagInput" placeholder="Add a tag">
+                                <button type="button" onclick="addEditTag()">Add Tag</button>
+                            </div>
+                            <div id="editTagsContainer" class="tags-container"></div>
+                        </div>
+                        <button type="submit">Save Changes</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

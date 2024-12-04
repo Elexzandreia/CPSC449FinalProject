@@ -1,5 +1,7 @@
 let token = null;
 let tags = new Set();
+let editTags = new Set();
+let currentEditingTask = null;
 
 // Message display function
 function showMessage(message, isError = false) {
@@ -123,15 +125,20 @@ async function fetchTasks() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache'  // Add cache control header
             },
-            body: JSON.stringify({})
+            body: JSON.stringify({
+                timestamp: new Date().getTime()  // Add timestamp to bypass cache
+            })
         });
+
         const data = await response.json();
+        
         if (response.ok) {
             displayTasks(data.tasks);
         } else {
-            showMessage(data.error, true);
+            throw new Error(data.error || 'Failed to fetch tasks');
         }
     } catch (error) {
         showMessage('Failed to fetch tasks: ' + error.message, true);
@@ -154,6 +161,180 @@ function displayTasks(tasks) {
         `;
         taskList.appendChild(taskElement);
     });
+}
+
+// Modal functions
+function openEditModal(encodedTask) {
+    try {
+        // Decode and parse the task data
+        const task = JSON.parse(decodeURIComponent(encodedTask));
+        
+        currentEditingTask = task;
+        document.getElementById('editTaskId').value = task.id;
+        document.getElementById('editTaskTitle').value = task.title;
+        document.getElementById('editTaskDescription').value = task.description || '';
+        document.getElementById('editTaskPriority').value = getPriorityId(task.priority);
+        
+        // Set up tags
+        editTags = new Set(task.tags);
+        updateEditTagsDisplay();
+        
+        // Show the modal
+        const modal = document.getElementById('editTaskModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('show');
+    } catch (error) {
+        console.error('Error opening edit modal:', error);
+        showMessage('Error opening edit form. Please try again.', true);
+    }
+}
+
+function closeEditModal() {
+    // Reset the form
+    document.getElementById('editTaskForm').reset();
+    
+    // Clear tags
+    editTags.clear();
+    updateEditTagsDisplay();
+    
+    // Reset current editing task
+    currentEditingTask = null;
+    
+    // Hide the modal
+    const modal = document.getElementById('editTaskModal');
+    modal.classList.remove('show');
+    modal.classList.add('hidden');
+}
+
+function getPriorityId(priorityName) {
+    const priorities = {
+        'HIGH': '1',
+        'MEDIUM': '2',
+        'LOW': '3'
+    };
+    return priorities[priorityName.toUpperCase()] || '2';
+}
+
+// Tag management for edit modal
+function addEditTag() {
+    const tagInput = document.getElementById('editTagInput');
+    const tag = tagInput.value.trim();
+    if (tag && !editTags.has(tag)) {
+        editTags.add(tag);
+        updateEditTagsDisplay();
+        tagInput.value = '';
+    }
+}
+
+function updateEditTagsDisplay() {
+    const container = document.getElementById('editTagsContainer');
+    container.innerHTML = '';
+    editTags.forEach(tag => {
+        const tagElement = document.createElement('span');
+        tagElement.className = 'tag';
+        tagElement.textContent = tag;
+        container.appendChild(tagElement);
+    });
+}
+
+// Update task display function
+function displayTasks(tasks) {
+    const taskList = document.getElementById('taskList');
+    taskList.innerHTML = '';
+    tasks.forEach(task => {
+        const taskElement = document.createElement('div');
+        taskElement.className = `task-item priority-${task.priority.toLowerCase()}`;
+        
+        // Store task data as a data attribute with proper string escaping
+        const taskData = encodeURIComponent(JSON.stringify(task));
+        
+        taskElement.innerHTML = `
+            <h3>${task.title}</h3>
+            <p>${task.description || 'No description'}</p>
+            <div>Priority: ${task.priority}</div>
+            <div class="tags-container">
+                ${task.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+            </div>
+            <div class="task-actions">
+                <button class="button-small edit-button" onclick="openEditModal('${taskData}')">
+                    Edit
+                </button>
+                <button class="button-small delete-button" onclick="deleteTask(${task.id})">
+                    Delete
+                </button>
+            </div>
+        `;
+        taskList.appendChild(taskElement);
+    });
+}
+
+// Update the edit form submission handler
+document.getElementById('editTaskForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const taskId = document.getElementById('editTaskId').value;
+    
+    try {
+        // Add console logs for debugging
+        const updateData = {
+            title: document.getElementById('editTaskTitle').value,
+            description: document.getElementById('editTaskDescription').value,
+            priority_id: parseInt(document.getElementById('editTaskPriority').value),
+            tags: Array.from(editTags)
+        };
+        
+        console.log('Updating task:', taskId);
+        console.log('Update data:', updateData);
+
+        const response = await fetch(`/tasks/${taskId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (response.ok) {
+            showMessage('Task updated successfully!');
+            closeEditModal();
+            await fetchTasks(); // Make sure to await the fetch
+        } else {
+            throw new Error(data.error || 'Failed to update task');
+        }
+    } catch (error) {
+        console.error('Update error:', error);
+        showMessage('Failed to update task: ' + error.message, true);
+    }
+});
+
+// Handle task deletion
+async function deleteTask(taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            showMessage('Task deleted successfully!');
+            fetchTasks();
+        } else {
+            throw new Error(data.error || 'Failed to delete task');
+        }
+    } catch (error) {
+        showMessage('Failed to delete task: ' + error.message, true);
+    }
 }
 
 async function askAI() {
