@@ -51,7 +51,6 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
-    print("Login endpoint was hit")
     data = request.json
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({"error": "Username and password are required"}), 400
