@@ -286,26 +286,41 @@ def analyze_tasks():
 
 
 # Route for editing/updating a task (JWT protected)
-@app.route('/tasks/<int:task_id>', methods=['PUT'])
+@app.route('/tasks/update', methods=['PUT'])
 @jwt_required()
-def update_task(task_id):
+def update_task():
     try:
+        # Get the current user ID from the JWT
         current_user_id = get_jwt_identity()
+
+        # Get the request data
+        data = request.json
+
+        # Validate that task_id is provided in the JSON body
+        task_id = data.get('task_id')
+        if not task_id:
+            return jsonify({"error": "Task ID is required"}), 400
+
+        # Query the task from the database
         task = Task.query.get(task_id)
         if not task:
             return jsonify({"error": "Task not found"}), 404
+
+        # Check if the current user owns the task
         if task.user_id != int(current_user_id):
             return jsonify({"error": "You do not have permission to update this task"}), 403
-            
-        data = request.json
+
+        # Update task fields
         task.title = data.get('title', task.title)
         task.description = data.get('description', task.description)
         task.priority_id = data.get('priority_id', task.priority_id)
-        
+
+        # Handle tags
         tag_names = data.get('tags', [])
         if not isinstance(tag_names, list) or not all(isinstance(tag, str) for tag in tag_names):
             return jsonify({"error": "Tags must be a list of strings"}), 400
-            
+
+        # Clear existing tags and add new ones
         task.tags = []
         for tag_name in tag_names:
             tag = Tag.query.filter_by(name=tag_name).first()
@@ -313,47 +328,54 @@ def update_task(task_id):
                 tag = Tag(name=tag_name)
                 db.session.add(tag)
             task.tags.append(tag)
-            
+
+        # Commit the changes to the database
         db.session.commit()
-        cache.delete_memoized(get_tasks_by_user)  # Clear the specific user's cache
-        cache.delete_memoized(get_tasks)          # Clear the general tasks cache
+
+        # Clear any relevant cache
+        cache.delete_memoized(get_tasks_by_user)
+        cache.delete_memoized(get_tasks)
+
         return jsonify({"message": "Task updated successfully"}), 200
+
     except Exception as e:
         app.logger.error(f"Error occurred while updating the task: {str(e)}")
         return jsonify({"error": "An error occurred while updating the task. Please try again."}), 500
 
+
 # Route for deleting a task (JWT protected)
-@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+@app.route('/tasks/delete', methods=['DELETE'])
 @jwt_required()
-def delete_task(task_id):
+def delete_task():
     try:
         current_user_id = get_jwt_identity()  # Get the logged-in user's ID
 
-        # Find the task to be deleted
+        # Get the task_id from the request body
+        data = request.json
+        task_id = data.get('task_id')
+        if not task_id:
+            return jsonify({"error": "Task ID is required"}), 400
+
+        # Find the task to delete
         task = Task.query.get(task_id)
-        
         if not task:
             return jsonify({"error": "Task not found"}), 404
-        
-        # DEBUG: Log the current user ID and task's user ID
-        app.logger.info(f"Current user ID: {current_user_id}, Task owner ID: {task.user_id}")
 
-
-        # Check if the logged-in user owns the task
+        # Check if the task belongs to the current user
         if task.user_id != int(current_user_id):
             return jsonify({"error": "You do not have permission to delete this task"}), 403
 
         # Delete the task
         db.session.delete(task)
         db.session.commit()
-        
-        cache.clear()  # Clear cache to keep data consistent
-        
+
+        cache.clear()  # Clear cache to ensure consistency
         return jsonify({"message": "Task deleted successfully"}), 200
 
     except Exception as e:
         app.logger.error(f"Error deleting task: {str(e)}")
         return jsonify({"error": "An error occurred while trying to delete the task"}), 500
+
 
 @app.route('/tasks/<int:task_id>/toggle-completion', methods=['PATCH'])
 @jwt_required()
