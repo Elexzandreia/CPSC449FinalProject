@@ -80,6 +80,22 @@
             </div>
 
             <div class="card">
+                <div class="task-filter">
+                    <h2>Task Filter</h2>
+                    <div class="filter-buttons">
+                        <button onclick="fetchAllTasks()" class="filter-button active">All Tasks</button>
+                        <button onclick="fetchCompletedTasks()" class="filter-button">Completed Tasks</button>
+                        <button onclick="fetchIncompleteTasks()" class="filter-button">Incomplete Tasks</button>
+                    </div>
+                    <!-- Optional: Add user filter
+                    <div class="user-filter">
+                        <input type="text" id="filterUsername" placeholder="Filter by username (optional)">
+                        <button onclick="applyUserFilter()">Apply Filter</button>
+                    </div> -->
+                </div>
+            </div>
+
+            <div class="card">
                 <div class="task-header">
                     <h2>Tasks</h2>
                     <button onclick="fetchTasks()">Refresh Tasks</button>
