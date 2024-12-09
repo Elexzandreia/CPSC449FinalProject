@@ -9,9 +9,8 @@ import json
 import config
 
 import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
+genai.configure(api_key="YOUR_GEMINI_API")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 app = Flask(__name__)
@@ -102,6 +101,9 @@ def create_task():
     if not isinstance(tag_names, list) or not all(isinstance(tag, str) for tag in tag_names):
         return jsonify({"error": "Tags must be a list of strings"}), 400
 
+    # Check if task is being created as done
+    is_done = 'Done' in tag_names
+    
     for tag_name in tag_names:
         tag = Tag.query.filter_by(name=tag_name).first()
         if not tag:
@@ -109,9 +111,23 @@ def create_task():
             db.session.add(tag)
         new_task.tags.append(tag)
 
-    db.session.commit()
-    cache.clear()  # Clear cache to keep data consistent
-    return jsonify({"message": "Task successfully created"}), 201
+    try:
+        db.session.commit()
+        # Clear relevant caches
+        cache.delete_memoized(get_tasks_by_user)
+        cache.delete(f"completed_tasks_{current_user_id}")
+        cache.delete(f"incomplete_tasks_{current_user_id}")
+        
+        return jsonify({
+            "message": "Task successfully created",
+            "task_id": new_task.id,
+            "is_done": is_done,
+            "tags": tag_names
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 # Route for getting all tasks (JWT protected), cache tasks list for faster access
@@ -170,7 +186,6 @@ def get_tasks_by_user():
         "priority": task.priority.name if task.priority else None,
         "tags": [tag.name for tag in task.tags],
         "created_by": user.username,
-        "is_completed": task.is_completed
 } for task in tasks]
     
     # Only cache if no timestamp was provided (not a force refresh)
@@ -205,7 +220,6 @@ def export_tasks():
                     "description": task.description or "",  # Handle None values
                     "p": task.priority.name if task.priority else "NONE",  # Shortened key for priority
                     "t": [tag.name for tag in task.tags],  # Shortened key for tags
-                    "i": task.is_completed
                 }
                 for task in tasks
             ]
@@ -256,7 +270,6 @@ def analyze_tasks():
                     "description": task.description or "",
                     "priority": task.priority.name if task.priority else "NONE",
                     "tags": [tag.name for tag in task.tags],
-                    "is_completed": task.is_completed
                 }
                 for task in tasks
             ]
@@ -307,6 +320,8 @@ def update_task(task_id):
         if not isinstance(tag_names, list) or not all(isinstance(tag, str) for tag in tag_names):
             return jsonify({"error": "Tags must be a list of strings"}), 400
             
+        is_done = 'Done' in tag_names
+
         task.tags = []
         for tag_name in tag_names:
             tag = Tag.query.filter_by(name=tag_name).first()
@@ -316,9 +331,18 @@ def update_task(task_id):
             task.tags.append(tag)
             
         db.session.commit()
-        cache.delete_memoized(get_tasks_by_user)  # Clear the specific user's cache
-        cache.delete_memoized(get_tasks)          # Clear the general tasks cache
-        return jsonify({"message": "Task updated successfully"}), 200
+        
+        # Clear relevant caches
+        cache.delete_memoized(get_tasks_by_user)
+        cache.delete(f"completed_tasks_{current_user_id}")
+        cache.delete(f"incomplete_tasks_{current_user_id}")
+        
+        return jsonify({
+            "message": "Task updated successfully",
+            "is_done": is_done,
+            "tags": tag_names
+        }), 200
+    
     except Exception as e:
         app.logger.error(f"Error occurred while updating the task: {str(e)}")
         return jsonify({"error": "An error occurred while updating the task. Please try again."}), 500
@@ -348,90 +372,150 @@ def delete_task(task_id):
         db.session.delete(task)
         db.session.commit()
         
-        cache.clear()  # Clear cache to keep data consistent
+        # Clear all relevant caches
+        cache.delete_memoized(get_tasks_by_user)
+        cache.delete(f"completed_tasks_{current_user_id}")
+        cache.delete(f"incomplete_tasks_{current_user_id}")
         
         return jsonify({"message": "Task deleted successfully"}), 200
 
     except Exception as e:
         app.logger.error(f"Error deleting task: {str(e)}")
+        db.session.rollback()
         return jsonify({"error": "An error occurred while trying to delete the task"}), 500
 
-@app.route('/tasks/<int:task_id>/toggle-completion', methods=['PATCH'])
+@app.route('/tasks/completed', methods=['POST'])
 @jwt_required()
-def toggle_task_completion(task_id):
+def get_completed_tasks():
     try:
         current_user_id = get_jwt_identity()
         data = request.json
-        is_completed = data.get('is_completed', False)
-        manage_tag = data.get('manage_tag', True)  # Default to True for tag management
         
-        task = Task.query.get(task_id)
+        username = data.get('username')
         
-        if not task:
-            return jsonify({"error": "Task not found"}), 404
-        if task.user_id != int(current_user_id):
-            return jsonify({"error": "You do not have permission to modify this task"}), 403
+        # Determine which user's tasks to fetch
+        if username and isinstance(username, str):
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+        else:
+            user = User.query.get(current_user_id)
             
-        # Update completion status
-        task.is_completed = is_completed
-        
-        if manage_tag:
-            completed_tag = Tag.query.filter_by(name='Completed').first()
-            if not completed_tag:
-                completed_tag = Tag(name='Completed')
-                db.session.add(completed_tag)
+        # Generate cache key
+        cache_key = f"completed_tasks_{user.id}"
+        request_timestamp = data.get('timestamp')
+        if request_timestamp:
+            cache_key = f"{cache_key}_{request_timestamp}"
             
-            if is_completed:
-                # Add 'Completed' tag if not present
-                if completed_tag not in task.tags:
-                    task.tags.append(completed_tag)
-            else:
-                # Remove 'Completed' tag if present
-                if completed_tag in task.tags:
-                    task.tags.remove(completed_tag)
+        # Check cache
+        cached_tasks = cache.get(cache_key)
+        if cached_tasks and not request_timestamp:
+            return jsonify({
+                "user": user.username,
+                "task_count": len(cached_tasks),
+                "tasks": cached_tasks
+            }), 200
+            
+        # Query tasks with "Done" tag
+        done_tag = Tag.query.filter_by(name='Done').first()
+        if done_tag:
+            tasks = Task.query.filter(
+                Task.user_id == user.id,
+                Task.tags.any(Tag.id == done_tag.id)
+            ).all()
+        else:
+            tasks = []
+            
+        # Format tasks
+        task_list = [{
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "priority": task.priority.name if task.priority else None,
+            "tags": [tag.name for tag in task.tags],
+            "created_by": user.username
+        } for task in tasks]
         
-        db.session.commit()
-        cache.delete_memoized(get_tasks_by_user)
-        
+        # Cache results if no timestamp provided
+        if not request_timestamp:
+            cache.set(cache_key, task_list, timeout=60)
+            
         return jsonify({
-            "message": "Task status updated successfully",
-            "task_id": task.id,
-            "is_completed": task.is_completed,
-            "tags": [tag.name for tag in task.tags]
+            "user": user.username,
+            "task_count": len(task_list),
+            "tasks": task_list
         }), 200
         
     except Exception as e:
-        app.logger.error(f"Error toggling task completion: {str(e)}")
-        db.session.rollback()
-        return jsonify({"error": "An error occurred while updating the task"}), 500
+        app.logger.error(f"Error getting completed tasks: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-
-@app.route('/tasks/completion-status', methods=['GET'])
+@app.route('/tasks/incomplete', methods=['POST'])
 @jwt_required()
-def get_tasks_completion_status():
+def get_incomplete_tasks():
     try:
         current_user_id = get_jwt_identity()
+        data = request.json
         
-        # Get all tasks for the current user
-        tasks = Task.query.filter_by(user_id=current_user_id).all()
+        username = data.get('username')
         
-        # Create status summary
-        status_summary = {
-            "total_tasks": len(tasks),
-            "completed_tasks": len([t for t in tasks if t.is_completed]),
-            "incomplete_tasks": len([t for t in tasks if not t.is_completed]),
-            "tasks": [{
-                "id": task.id,
-                "title": task.title,
-                "is_completed": task.is_completed
-            } for task in tasks]
-        }
+        # Determine which user's tasks to fetch
+        if username and isinstance(username, str):
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+        else:
+            user = User.query.get(current_user_id)
+            
+        # Generate cache key
+        cache_key = f"incomplete_tasks_{user.id}"
+        request_timestamp = data.get('timestamp')
+        if request_timestamp:
+            cache_key = f"{cache_key}_{request_timestamp}"
+            
+        # Check cache
+        cached_tasks = cache.get(cache_key)
+        if cached_tasks and not request_timestamp:
+            return jsonify({
+                "user": user.username,
+                "task_count": len(cached_tasks),
+                "tasks": cached_tasks
+            }), 200
+            
+        # Query tasks without "Done" tag
+        done_tag = Tag.query.filter_by(name='Done').first()
+        if done_tag:
+            tasks = Task.query.filter(
+                Task.user_id == user.id,
+                ~Task.tags.any(Tag.id == done_tag.id)
+            ).all()
+        else:
+            # If "Done" tag doesn't exist, all tasks are incomplete
+            tasks = Task.query.filter_by(user_id=user.id).all()
+            
+        # Format tasks
+        task_list = [{
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "priority": task.priority.name if task.priority else None,
+            "tags": [tag.name for tag in task.tags],
+            "created_by": user.username
+        } for task in tasks]
         
-        return jsonify(status_summary), 200
+        # Cache results if no timestamp provided
+        if not request_timestamp:
+            cache.set(cache_key, task_list, timeout=60)
+            
+        return jsonify({
+            "user": user.username,
+            "task_count": len(task_list),
+            "tasks": task_list
+        }), 200
         
     except Exception as e:
-        app.logger.error(f"Error getting completion status: {str(e)}")
-        return jsonify({"error": "An error occurred while fetching task status"}), 500
+        app.logger.error(f"Error getting incomplete tasks: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():

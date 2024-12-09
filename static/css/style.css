@@ -101,6 +101,16 @@ button:hover {
     gap: 10px;
 }
 
+.task-list-status {
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #666;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
 .task-item {
     background: white;
     padding: 15px;
@@ -261,5 +271,48 @@ ai-response-area {
 
 .task-actions {
     display: flex;
+    gap: 10px;
+}
+
+.task-filter {
+    padding: 15px;
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.filter-button {
+    padding: 8px 16px;
+    border: 1px solid #0052a3;
+    border-radius: 4px;
+    background: #0066cc;
+    cursor: pointer;
+}
+
+.filter-button.active {
+    background: #0066cc;
+    color: white;
+    border-color: #0052a3;
+}
+
+.user-filter {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.user-filter input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.task-status {
+    display: flex;
+    align-items: center;
     gap: 10px;
 }
