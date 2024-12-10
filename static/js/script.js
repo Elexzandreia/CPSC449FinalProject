@@ -147,24 +147,6 @@ async function fetchTasks() {
     }
 }
 
-// function displayTasks(tasks) {
-//     const taskList = document.getElementById('taskList');
-//     taskList.innerHTML = '';
-//     tasks.forEach(task => {
-//         const taskElement = document.createElement('div');
-//         taskElement.className = `task-item priority-${task.priority.toLowerCase()}`;
-//         taskElement.innerHTML = `
-//             <h3>${task.title}</h3>
-//             <p>${task.description || 'No description'}</p>
-//             <div>Priority: ${task.priority}</div>
-//             <div class="tags-container">
-//                 ${task.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-//             </div>
-//         `;
-//         taskList.appendChild(taskElement);
-//     });
-// }
-
 // Modal functions
 function openEditModal(encodedTask) {
     try {
@@ -217,6 +199,14 @@ function getPriorityId(priorityName) {
     return priorities[priorityName.toUpperCase()] || '2';
 }
 
+// // Helper function to determine priority from tags
+// function getPriorityFromTags(tags) {
+//     if (tags.includes('High')) return 'High';
+//     if (tags.includes('Medium')) return 'Medium';
+//     if (tags.includes('Low')) return 'Low';
+//     return 'Medium'; // Default priority
+// }
+
 // Tag management for edit modal
 function addEditTag() {
     const tagInput = document.getElementById('editTagInput');
@@ -241,43 +231,41 @@ function updateEditTagsDisplay() {
 
 // Update task display function
 function displayTasks(tasks) {
+    console.log('Tasks received:', tasks); // Debug log
     const taskList = document.getElementById('taskList');
     taskList.innerHTML = '';
     tasks.forEach(task => {
         const taskElement = document.createElement('div');
         taskElement.className = `task-item priority-${task.priority.toLowerCase()}`;
         
-        // Check if task has 'Done' tag
-        const isDone = task.tags.includes('Done');
-        
-        // Store task data as a data attribute with proper string escaping
+        // Store task data
         const taskData = encodeURIComponent(JSON.stringify(task));
         
-        // In displayTasks function:
+        // Remove quotes from taskId in onchange event
         taskElement.innerHTML = `
-        <div class="task-header">
-            <div class="task-status">
-                <input type="checkbox"
-                    id="task-${task.id}"
-                    class="task-checkbox"
-                    ${task.tags.includes('Done') ? 'checked' : ''}
-                    onchange="toggleTaskCompletion(${task.id}, this.checked)">
-                <h3 class="${task.tags.includes('Done') ? 'completed-task' : ''}">${task.title}</h3>
+            <div class="task-header">
+                <div class="task-status">
+                    <input type="checkbox"
+                        id="task-${task.id}"  // Changed from task.task_id
+                        class="task-checkbox"
+                        ${task.tags.includes('Done') ? 'checked' : ''}
+                        onchange="toggleTaskCompletion(${task.id}, this.checked)">
+                    <h3 class="${task.tags.includes('Done') ? 'completed-task' : ''}">${task.title}</h3>
+                </div>
+                <div class="task-actions">
+                    <button class="button-small edit-button" onclick="openEditModal('${taskData}')">
+                        Edit
+                    </button>
+                    <button class="button-small delete-button" onclick="deleteTask(${task.task_id})">
+                        Delete
+                    </button>
+                </div>
             </div>
-            <div class="task-actions">
-                <button class="button-small edit-button" onclick="openEditModal('${taskData}')">
-                    Edit
-                </button>
-                <button class="button-small delete-button" onclick="deleteTask(${task.id})">
-                    Delete
-                </button>
+            <p>${task.description || 'No description'}</p>
+            <div>Priority: ${task.priority}</div>
+            <div class="tags-container">
+                ${task.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
             </div>
-        </div>
-        <p>${task.description || 'No description'}</p>
-        <div>Priority: ${task.priority}</div>
-        <div class="tags-container">
-            ${task.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-        </div>
         `;
         taskList.appendChild(taskElement);
     });
@@ -339,7 +327,7 @@ async function deleteTask(taskId) {
                 'Content-Type': 'application/json',  // Added Content-Type header
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ task_id: taskId })  // Add task_id to request body
+            body: JSON.stringify({ id: taskId })  // Add task_id to request body
         });
 
         const data = await response.json();
@@ -378,24 +366,25 @@ async function fetchCompletedTasks() {
         currentFilter = 'completed';
         updateFilterButtons('completed');
         
-        const response = await fetch('/tasks/completed', {
-            method: 'POST',
+        const response = await fetch('/tasks/complete', { 
+            method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                username: filterUsername || undefined,
-                timestamp: new Date().getTime()
-            })
+            }
         });
 
         const data = await response.json();
         
         if (response.ok) {
-            displayTasks(data.tasks);
-            // Update task count or status if desired
-            updateTaskStatus(`Showing ${data.task_count} completed tasks${filterUsername ? ` for user ${filterUsername}` : ''}`);
+            displayTasks(data);             // Update task count
+            updateTaskStatus(`Showing ${data.length} completed tasks`);
+            
+            // If you need to filter by username (optional)
+            if (filterUsername) {
+                const filteredTasks = data.filter(task => task.username === filterUsername);
+                displayTasks(filteredTasks);
+                updateTaskStatus(`Showing ${filteredTasks.length} completed tasks for user ${filterUsername}`);
+            }
         } else {
             throw new Error(data.error || 'Failed to fetch completed tasks');
         }
@@ -411,30 +400,33 @@ async function fetchIncompleteTasks() {
         updateFilterButtons('incomplete');
         
         const response = await fetch('/tasks/incomplete', {
-            method: 'POST',
+            method: 'GET',  // Changed to GET method
             headers: {
-                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                username: filterUsername || undefined,
-                timestamp: new Date().getTime()
-            })
+            }
+            // Removed body since it's a GET request
         });
-
+ 
         const data = await response.json();
         
         if (response.ok) {
-            displayTasks(data.tasks);
-            // Update task count or status if desired
-            updateTaskStatus(`Showing ${data.task_count} incomplete tasks${filterUsername ? ` for user ${filterUsername}` : ''}`);
+            displayTasks(data);  // data is already in the correct format
+            // Update task count
+            updateTaskStatus(`Showing ${data.length} incomplete tasks`);
+            
+            // If you need to filter by username (optional)
+            if (filterUsername) {
+                const filteredTasks = data.filter(task => task.username === filterUsername);
+                displayTasks(filteredTasks);
+                updateTaskStatus(`Showing ${filteredTasks.length} incomplete tasks for user ${filterUsername}`);
+            }
         } else {
             throw new Error(data.error || 'Failed to fetch incomplete tasks');
         }
     } catch (error) {
         showMessage('Failed to fetch incomplete tasks: ' + error.message, true);
     }
-}
+ }
 
 // Apply user filter
 function applyUserFilter() {
@@ -470,6 +462,11 @@ function updateTaskStatus(message) {
 
 async function toggleTaskCompletion(taskId, isCompleted) {
     try {
+        console.log('Original taskId:', taskId); // Debug log
+
+        // Ensure taskId is a number (since your backend expects an integer)
+        const numericTaskId = parseInt(taskId);
+
         // Get the current task element
         const taskElement = document.querySelector(`#task-${taskId}`).closest('.task-header').parentElement;
         
@@ -477,7 +474,7 @@ async function toggleTaskCompletion(taskId, isCompleted) {
         const title = taskElement.querySelector('h3').textContent;
         const description = taskElement.querySelector('p').textContent === 'No description' ? '' : taskElement.querySelector('p').textContent;
         
-        // Extract priority ID from class name 
+        // Extract priority ID from class name
         const priorityClass = taskElement.className.match(/priority-(\w+)/)[1];
         const priorityMap = {
             'high': 1,
@@ -498,28 +495,33 @@ async function toggleTaskCompletion(taskId, isCompleted) {
         } else {
             tags = tags.filter(tag => tag !== 'Done');
         }
+
+        const updateData = {
+            task_id: numericTaskId,  // Use the parsed numeric ID
+            title: title,
+            description: description,
+            priority_id: priority_id,
+            tags: tags
+        };
+
+        console.log('Sending update data:', updateData); // Debug log
         
-        // Update task using new endpoint
         const response = await fetch('/tasks/update', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({
-                task_id: taskId,  // Add task_id to request body
-                title: title,
-                description: description,
-                priority_id: priority_id,
-                tags: tags
-            })
+            body: JSON.stringify(updateData)
         });
- 
+
+        const data = await response.json();
+        console.log('Response:', data); // Debug log
+
         if (!response.ok) {
-            const data = await response.json();
             throw new Error(data.error || 'Failed to update task status');
         }
- 
+
         // Refresh current view
         switch(currentFilter) {
             case 'completed':
@@ -541,7 +543,7 @@ async function toggleTaskCompletion(taskId, isCompleted) {
             checkbox.checked = !isCompleted;
         }
     }
- }
+}
 
 async function askAI() {
     const promptInput = document.getElementById('aiPrompt');

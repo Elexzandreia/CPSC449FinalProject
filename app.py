@@ -374,138 +374,63 @@ def delete_task():
         app.logger.error(f"Error deleting task: {str(e)}")
         return jsonify({"error": "An error occurred while trying to delete the task"}), 500
 
-@app.route('/tasks/completed', methods=['POST'])
-@jwt_required()
-def get_completed_tasks():
-    try:
-        current_user_id = get_jwt_identity()
-        data = request.json
-        
-        username = data.get('username')
-        
-        # Determine which user's tasks to fetch
-        if username and isinstance(username, str):
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({"error": "User not found"}), 404
-        else:
-            user = User.query.get(current_user_id)
-            
-        # Generate cache key
-        cache_key = f"completed_tasks_{user.id}"
-        request_timestamp = data.get('timestamp')
-        if request_timestamp:
-            cache_key = f"{cache_key}_{request_timestamp}"
-            
-        # Check cache
-        cached_tasks = cache.get(cache_key)
-        if cached_tasks and not request_timestamp:
-            return jsonify({
-                "user": user.username,
-                "task_count": len(cached_tasks),
-                "tasks": cached_tasks
-            }), 200
-            
-        # Query tasks with "Done" tag
-        done_tag = Tag.query.filter_by(name='Done').first()
-        if done_tag:
-            tasks = Task.query.filter(
-                Task.user_id == user.id,
-                Task.tags.any(Tag.id == done_tag.id)
-            ).all()
-        else:
-            tasks = []
-            
-        # Format tasks
-        task_list = [{
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "priority": task.priority.name if task.priority else None,
-            "tags": [tag.name for tag in task.tags],
-            "created_by": user.username
-        } for task in tasks]
-        
-        # Cache results if no timestamp provided
-        if not request_timestamp:
-            cache.set(cache_key, task_list, timeout=60)
-            
-        return jsonify({
-            "user": user.username,
-            "task_count": len(task_list),
-            "tasks": task_list
-        }), 200
-        
-    except Exception as e:
-        app.logger.error(f"Error getting completed tasks: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+# Endpoint: Get all tasks with the tag "Done" along with the user information
+@app.route('/tasks/complete', methods=['GET'])
+def getCompletedTasks():
+    # Query tasks with the "Done" tag and include the associated user
+    tasks = (
+        db.session.query(Task, User)
+        .join(Task.tags)  # Join with the Tag model
+        .join(User, Task.user_id == User.id)  # Join with the User model
+        .filter(Tag.name == "Done")  # Filter for the "Done" tag
+        .all()
+    )
 
-@app.route('/tasks/incomplete', methods=['POST'])
-@jwt_required()
-def get_incomplete_tasks():
-    try:
-        current_user_id = get_jwt_identity()
-        data = request.json
-        
-        username = data.get('username')
-        
-        # Determine which user's tasks to fetch
-        if username and isinstance(username, str):
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({"error": "User not found"}), 404
-        else:
-            user = User.query.get(current_user_id)
-            
-        # Generate cache key
-        cache_key = f"incomplete_tasks_{user.id}"
-        request_timestamp = data.get('timestamp')
-        if request_timestamp:
-            cache_key = f"{cache_key}_{request_timestamp}"
-            
-        # Check cache
-        cached_tasks = cache.get(cache_key)
-        if cached_tasks and not request_timestamp:
-            return jsonify({
-                "user": user.username,
-                "task_count": len(cached_tasks),
-                "tasks": cached_tasks
-            }), 200
-            
-        # Query tasks without "Done" tag
-        done_tag = Tag.query.filter_by(name='Done').first()
-        if done_tag:
-            tasks = Task.query.filter(
-                Task.user_id == user.id,
-                ~Task.tags.any(Tag.id == done_tag.id)
-            ).all()
-        else:
-            # If "Done" tag doesn't exist, all tasks are incomplete
-            tasks = Task.query.filter_by(user_id=user.id).all()
-            
-        # Format tasks
-        task_list = [{
-            "id": task.id,
+    # Format the result
+    result = [
+        {
+            "task_id": task.id,
             "title": task.title,
             "description": task.description,
-            "priority": task.priority.name if task.priority else None,
+            "user_id": user.id,
+            "username": user.username,
             "tags": [tag.name for tag in task.tags],
-            "created_by": user.username
-        } for task in tasks]
-        
-        # Cache results if no timestamp provided
-        if not request_timestamp:
-            cache.set(cache_key, task_list, timeout=60)
-            
-        return jsonify({
-            "user": user.username,
-            "task_count": len(task_list),
-            "tasks": task_list
-        }), 200
-        
-    except Exception as e:
-        app.logger.error(f"Error getting incomplete tasks: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+            "priority": task.priority.name if task.priority else "Medium"
+        }
+        for task, user in tasks
+    ]
+
+    return jsonify(result), 200
+
+
+# Endpoint: Get all tasks with the tag as not "Done" along with the user information
+@app.route('/tasks/incomplete', methods=['GET'])
+def getIncompletedTasks():
+    # Query tasks with the "Done" tag and include the associated user
+    tasks = (
+        db.session.query(Task, User)
+        .join(Task.tags)  # Join with the Tag model
+        .join(User, Task.user_id == User.id)  # Join with the User model
+        .filter(~Task.tags.any(Tag.name == "Done"))  # Exclude tasks with the "Done" tag
+        .all(
+)
+    )
+
+    # Format the result
+    result = [
+        {
+            "task_id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "user_id": user.id,
+            "username": user.username,
+            "tags": [tag.name for tag in task.tags],
+            "priority": task.priority.name if task.priority else "Medium"
+        }
+        for task, user in tasks
+    ]
+
+    return jsonify(result), 200
 
 if __name__ == '__main__':
     with app.app_context():
