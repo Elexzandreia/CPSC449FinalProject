@@ -104,7 +104,7 @@ Here are detailed descriptions of each API endpoint in the `app.py` file:
    - **Description**: Retrieves tasks for a specific user or the authenticated user. Accepts a JSON payload with an optional `username` and `timestamp`. If `username` is provided, it fetches tasks for that user; otherwise, it fetches tasks for the authenticated user. The response is cached for 60 seconds unless a `timestamp` is provided. Returns a list of tasks with their details.
 
 7. **Update Task**:
-   - **Endpoint**: `/tasks/<int:task_id>`
+   - **Endpoint**: `/tasks/update`
    - **Method**: `PUT`
    - **Description**: Updates an existing task for the authenticated user. Accepts a JSON payload with the updated task details. Validates the input and updates the task in the database. Returns a success message or an error if the input is invalid or the task is not found.
 
@@ -128,4 +128,8 @@ Here are detailed descriptions of each API endpoint in the `app.py` file:
     - **Method**: `GET`
     - **Description**: Retrieves the completion status summary of tasks for the authenticated user. Returns a summary with the total number of tasks, the number of completed tasks, the number of incomplete tasks, and a list of tasks with their completion status.
 
+12. **Delete Task**:
+   - **Endpoint**: `/tasks/delete`
+   - **Method**: `DELETE`
+   - **Description**: Deletes an existing task for the authenticated user. Accepts a JSON payload containing the task ID to be deleted. Validates the input and removes the task from the database. Returns a success message upon successful deletion or an error if the input is invalid, the task is not found, or the user does not have permission to delete the task.
 
