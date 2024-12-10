@@ -168,8 +168,7 @@ def get_tasks_by_user():
         "description": task.description,
         "priority": task.priority.name if task.priority else None,
         "tags": [tag.name for tag in task.tags],
-        "created_by": user.username,
-        "is_completed": task.is_completed
+        "created_by": user.username
 } for task in tasks]
     
     # Only cache if no timestamp was provided (not a force refresh)

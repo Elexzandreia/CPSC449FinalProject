@@ -108,7 +108,12 @@ Here are detailed descriptions of each API endpoint in the `app.py` file:
    - **Method**: `PUT`
    - **Description**: Updates an existing task for the authenticated user. Accepts a JSON payload with the updated task details. Validates the input and updates the task in the database. Returns a success message or an error if the input is invalid or the task is not found.
 
-8. **Export Tasks**:
+8. **Delete Task**:
+   - **Endpoint**: `/tasks/delete`
+   - **Method**: `DELETE`
+   - **Description**: Deletes an existing task for the authenticated user. Accepts a JSON payload containing the task ID to be deleted. Validates the input and removes the task from the database. Returns a success message upon successful deletion or an error if the input is invalid, the task is not found, or the user does not have permission to delete the task.
+
+9. **Export Tasks**:
    - **Endpoint**: `/api/export/tasks`
    - **Method**: `GET`
    - **Description**: Exports tasks to a JSON-format payload for the authenticated user. Returns that JSON or an error if the export fails.
@@ -118,18 +123,16 @@ Here are detailed descriptions of each API endpoint in the `app.py` file:
    - **Method**: `POST`
    - **Description**: Analyzes tasks using an AI model. Accepts a JSON payload with the tasks to be analyzed. Returns the AI-generated analysis or an error if the analysis fails.
 
-10. **Toggle Task Completion**:
-    - **Endpoint**: `/tasks/<int:task_id>/toggle-completion`
-    - **Method**: `PUT`
-    - **Description**: Toggles the completion status of a task for the authenticated user. Updates the task's `is_completed` status and adjusts the associated tags. Returns a success message with the updated task details or an error if the task is not found or the update fails.
+10. **Retrieve Completed Tasks**:
+   - **Endpoint**: `/tasks/completed`
+   - **Method**: `POST`
+   - **Description**: Retrieves all completed tasks for a specific user or the authenticated user. Accepts a JSON payload with an optional username and timestamp. If username is provided, it fetches completed tasks for that user; otherwise, it fetches completed tasks for the authenticated user. Returns a list of completed tasks with their details.
 
-11. **Get Tasks Completion Status**:
-    - **Endpoint**: `/tasks/completion-status`
-    - **Method**: `GET`
-    - **Description**: Retrieves the completion status summary of tasks for the authenticated user. Returns a summary with the total number of tasks, the number of completed tasks, the number of incomplete tasks, and a list of tasks with their completion status.
+11. **Retrieve Incomplete Tasks**:
+   - **Endpoint**: `/tasks/incomplete`
+   - **Method**: `POST`
+   - **Description**: Retrieves all incomplete tasks for a specific user or the authenticated user. Accepts a JSON payload with an optional username and timestamp. If username is provided, it fetches incomplete tasks for that user; otherwise, it fetches incomplete tasks for the authenticated user. Returns a list of incomplete tasks with their details.
 
-12. **Delete Task**:
-   - **Endpoint**: `/tasks/delete`
-   - **Method**: `DELETE`
-   - **Description**: Deletes an existing task for the authenticated user. Accepts a JSON payload containing the task ID to be deleted. Validates the input and removes the task from the database. Returns a success message upon successful deletion or an error if the input is invalid, the task is not found, or the user does not have permission to delete the task.
+
+
 
