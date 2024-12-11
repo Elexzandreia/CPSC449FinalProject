@@ -376,6 +376,7 @@ def delete_task():
 
 # Endpoint: Get all tasks with the tag "Done" along with the user information
 @app.route('/tasks/complete', methods=['GET'])
+@jwt_required()
 def getCompletedTasks():
     # Query tasks with the "Done" tag and include the associated user
     tasks = (
@@ -405,6 +406,7 @@ def getCompletedTasks():
 
 # Endpoint: Get all tasks with the tag as not "Done" along with the user information
 @app.route('/tasks/incomplete', methods=['GET'])
+@jwt_required()
 def getIncompletedTasks():
     # Query tasks with the "Done" tag and include the associated user
     tasks = (
